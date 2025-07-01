@@ -184,16 +184,20 @@ internal sealed class FreeItems : IGitHubPluginUpdates, IBotModules {
                 int count = 12;
 
                 foreach (int gameId in games) {
-                    await bot.ArchiWebHandler.UrlPostWithSession(
+                    bool response = await bot.ArchiWebHandler.UrlPostWithSession(
                         new Uri("https://api.steampowered.com/IStoreService/SkipDiscoveryQueueItem/v1/"), data: new Dictionary<string, string>(3) {
                             { "access_token", bot.AccessToken ?? string.Empty },
                             { "appid", $"{gameId}" }
                         }
                     ).ConfigureAwait(false);
 
-                    count -= 1;
+                    if (response) {
+                        count -= 1;
 
-                    bot.ArchiLogger.LogGenericInfo($"ID: {gameId} | Status: OK | Queue: {count}");
+                        bot.ArchiLogger.LogGenericInfo($"ID: {gameId} | Status: OK | Queue: {count}");
+                    } else {
+                        bot.ArchiLogger.LogGenericInfo($"ID: {gameId} | Status: Error | Queue: {count}");
+                    }
                 }
 
                 bot.ArchiLogger.LogGenericInfo($"Status: QueueIsEmpty | Next run: {DateTime.Now.AddHours(FreeItemsTimeout[bot.BotName]):T}");
