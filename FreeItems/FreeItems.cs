@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Net;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -184,7 +183,7 @@ internal sealed class FreeItems : IGitHubPluginUpdates, IBotModules {
             if ((games != null) && (games.Count > 0)) {
                 int count = 12;
 
-                ObjectResponse<JsonElement>? response = await bot.ArchiWebHandler.UrlPostToJsonObjectWithSession<JsonElement>(
+                bool response = await bot.ArchiWebHandler.UrlPostWithSession(
                     new Uri("https://api.steampowered.com/IStoreService/SkipDiscoveryQueueItem/v1/"), data: new Dictionary<string, string>(3) {
                         { "access_token", bot.AccessToken ?? string.Empty },
                         { "appid", $"{games[0]}" }
@@ -193,7 +192,7 @@ internal sealed class FreeItems : IGitHubPluginUpdates, IBotModules {
 
                 count -= 1;
 
-                if (response?.StatusCode == HttpStatusCode.OK) {
+                if (response) {
                     bot.ArchiLogger.LogGenericInfo($"ID: {games[0]} | Status: OK | Queue: {count}");
                 } else {
                     bot.ArchiLogger.LogGenericInfo($"ID: {games[0]} | Status: Error | Queue: {count} | Next run: {DateTime.Now.AddMinutes(1):T}");
