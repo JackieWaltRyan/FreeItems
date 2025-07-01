@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Net;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -184,19 +185,23 @@ internal sealed class FreeItems : IGitHubPluginUpdates, IBotModules {
                 int count = 12;
 
                 foreach (int gameId in games) {
-                    bool response = await bot.ArchiWebHandler.UrlPostWithSession(
+                    ObjectResponse<JsonElement>? response = await bot.ArchiWebHandler.UrlPostToJsonObjectWithSession<JsonElement>(
                         new Uri("https://api.steampowered.com/IStoreService/SkipDiscoveryQueueItem/v1/"), data: new Dictionary<string, string>(3) {
                             { "access_token", bot.AccessToken ?? string.Empty },
                             { "appid", $"{gameId}" }
-                        }, checkSessionPreemptively: false
+                        }
                     ).ConfigureAwait(false);
 
-                    if (response) {
-                        count -= 1;
+                    count -= 1;
 
+                    if (response?.StatusCode == HttpStatusCode.OK) {
                         bot.ArchiLogger.LogGenericInfo($"ID: {gameId} | Status: OK | Queue: {count}");
                     } else {
-                        bot.ArchiLogger.LogGenericInfo($"ID: {gameId} | Status: Error | Queue: {count}");
+                        bot.ArchiLogger.LogGenericInfo($"ID: {gameId} | Status: Error | Queue: {count} | Next run: {DateTime.Now.AddMinutes(1):T}");
+
+                        RecommendationsTimers[bot.BotName].Change(TimeSpan.FromMinutes(1), TimeSpan.FromMilliseconds(-1));
+
+                        return;
                     }
                 }
 
