@@ -188,7 +188,7 @@ internal sealed class FreeItems : IGitHubPluginUpdates, IBotModules {
                         new Uri("https://api.steampowered.com/IStoreService/SkipDiscoveryQueueItem/v1/"), data: new Dictionary<string, string>(3) {
                             { "access_token", bot.AccessToken ?? string.Empty },
                             { "appid", $"{gameId}" }
-                        }
+                        }, checkSessionPreemptively: false
                     ).ConfigureAwait(false);
 
                     if (response) {
