@@ -184,25 +184,23 @@ internal sealed class FreeItems : IGitHubPluginUpdates, IBotModules {
             if ((games != null) && (games.Count > 0)) {
                 int count = 12;
 
-                foreach (int gameId in games) {
-                    ObjectResponse<JsonElement>? response = await bot.ArchiWebHandler.UrlPostToJsonObjectWithSession<JsonElement>(
-                        new Uri("https://api.steampowered.com/IStoreService/SkipDiscoveryQueueItem/v1/"), data: new Dictionary<string, string>(3) {
-                            { "access_token", bot.AccessToken ?? string.Empty },
-                            { "appid", $"{gameId}" }
-                        }
-                    ).ConfigureAwait(false);
-
-                    count -= 1;
-
-                    if (response?.StatusCode == HttpStatusCode.OK) {
-                        bot.ArchiLogger.LogGenericInfo($"ID: {gameId} | Status: OK | Queue: {count}");
-                    } else {
-                        bot.ArchiLogger.LogGenericInfo($"ID: {gameId} | Status: Error | Queue: {count} | Next run: {DateTime.Now.AddMinutes(1):T}");
-
-                        RecommendationsTimers[bot.BotName].Change(TimeSpan.FromMinutes(1), TimeSpan.FromMilliseconds(-1));
-
-                        return;
+                ObjectResponse<JsonElement>? response = await bot.ArchiWebHandler.UrlPostToJsonObjectWithSession<JsonElement>(
+                    new Uri("https://api.steampowered.com/IStoreService/SkipDiscoveryQueueItem/v1/"), data: new Dictionary<string, string>(3) {
+                        { "access_token", bot.AccessToken ?? string.Empty },
+                        { "appid", $"{games[0]}" }
                     }
+                ).ConfigureAwait(false);
+
+                count -= 1;
+
+                if (response?.StatusCode == HttpStatusCode.OK) {
+                    bot.ArchiLogger.LogGenericInfo($"ID: {games[0]} | Status: OK | Queue: {count}");
+                } else {
+                    bot.ArchiLogger.LogGenericInfo($"ID: {games[0]} | Status: Error | Queue: {count} | Next run: {DateTime.Now.AddMinutes(1):T}");
+
+                    RecommendationsTimers[bot.BotName].Change(TimeSpan.FromMinutes(1), TimeSpan.FromMilliseconds(-1));
+
+                    return;
                 }
 
                 bot.ArchiLogger.LogGenericInfo($"Status: QueueIsEmpty | Next run: {DateTime.Now.AddHours(FreeItemsTimeout[bot.BotName]):T}");
