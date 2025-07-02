@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using ArchiSteamFarm.Helpers.Json;
 using ArchiSteamFarm.Plugins.Interfaces;
 using ArchiSteamFarm.Steam;
+using ArchiSteamFarm.Steam.Integration;
 using ArchiSteamFarm.Web.Responses;
 
 namespace FreeItems;
@@ -17,11 +18,13 @@ internal sealed class FreeItems : IGitHubPluginUpdates, IBotModules {
 
     public Dictionary<string, bool> PointStoreEnable = new();
     public Dictionary<string, bool> RecommendationsEnable = new();
+    public Dictionary<string, bool> DailyStickersEnable = new();
 
     public Dictionary<string, uint> FreeItemsTimeout = new();
 
     public Dictionary<string, Timer> PointStoreTimers = new();
     public Dictionary<string, Timer> RecommendationsTimers = new();
+    public Dictionary<string, Timer> DailyStickersTimers = new();
 
     public Task OnLoaded() => Task.CompletedTask;
 
@@ -29,6 +32,7 @@ internal sealed class FreeItems : IGitHubPluginUpdates, IBotModules {
         if (additionalConfigProperties != null) {
             PointStoreEnable[bot.BotName] = false;
             RecommendationsEnable[bot.BotName] = false;
+            DailyStickersEnable[bot.BotName] = false;
 
             FreeItemsTimeout[bot.BotName] = 6;
 
@@ -44,8 +48,15 @@ internal sealed class FreeItems : IGitHubPluginUpdates, IBotModules {
                 bot.ArchiLogger.LogGenericInfo("ClaimRecommendationsItems Dispose.");
             }
 
+            if (DailyStickersTimers.TryGetValue(bot.BotName, out Timer? dailystickerstimers)) {
+                await dailystickerstimers.DisposeAsync().ConfigureAwait(false);
+
+                bot.ArchiLogger.LogGenericInfo("ClaimDailyStickers Dispose.");
+            }
+
             PointStoreTimers[bot.BotName] = new Timer(async e => await ClaimPointStoreItems(bot).ConfigureAwait(false), null, Timeout.Infinite, Timeout.Infinite);
             RecommendationsTimers[bot.BotName] = new Timer(async e => await ClaimRecommendationsItems(bot).ConfigureAwait(false), null, Timeout.Infinite, Timeout.Infinite);
+            DailyStickersTimers[bot.BotName] = new Timer(async e => await ClaimDailyStickers(bot).ConfigureAwait(false), null, Timeout.Infinite, Timeout.Infinite);
 
             foreach (KeyValuePair<string, JsonElement> configProperty in additionalConfigProperties) {
                 switch (configProperty.Key) {
@@ -69,6 +80,16 @@ internal sealed class FreeItems : IGitHubPluginUpdates, IBotModules {
                         break;
                     }
 
+                    case "FreeDailyStickers" when configProperty.Value.ValueKind is JsonValueKind.True or JsonValueKind.False: {
+                        bool isEnabled = configProperty.Value.GetBoolean();
+
+                        bot.ArchiLogger.LogGenericInfo($"FreeDailyStickers: {isEnabled}");
+
+                        DailyStickersEnable[bot.BotName] = isEnabled;
+
+                        break;
+                    }
+
                     case "FreeItemsTimeout" when configProperty.Value.ValueKind == JsonValueKind.Number: {
                         FreeItemsTimeout[bot.BotName] = configProperty.Value.ToJsonObject<uint>();
 
@@ -83,6 +104,10 @@ internal sealed class FreeItems : IGitHubPluginUpdates, IBotModules {
 
             if (RecommendationsEnable[bot.BotName]) {
                 RecommendationsTimers[bot.BotName].Change(1, -1);
+            }
+
+            if (DailyStickersEnable[bot.BotName]) {
+                DailyStickersTimers[bot.BotName].Change(1, -1);
             }
         }
     }
@@ -183,23 +208,25 @@ internal sealed class FreeItems : IGitHubPluginUpdates, IBotModules {
             if ((games != null) && (games.Count > 0)) {
                 int count = 12;
 
-                bool response = await bot.ArchiWebHandler.UrlPostWithSession(
-                    new Uri("https://api.steampowered.com/IStoreService/SkipDiscoveryQueueItem/v1/"), data: new Dictionary<string, string>(3) {
-                        { "access_token", bot.AccessToken ?? string.Empty },
-                        { "appid", $"{games[0]}" }
+                foreach (int gameId in games) {
+                    bool response = await bot.ArchiWebHandler.UrlPostWithSession(
+                        new Uri("https://api.steampowered.com/IStoreService/SkipDiscoveryQueueItem/v1/"), data: new Dictionary<string, string>(2) {
+                            { "access_token", bot.AccessToken ?? string.Empty },
+                            { "appid", $"{gameId}" }
+                        }, session: ArchiWebHandler.ESession.None
+                    ).ConfigureAwait(false);
+
+                    count -= 1;
+
+                    if (response) {
+                        bot.ArchiLogger.LogGenericInfo($"ID: {games[0]} | Status: OK | Queue: {count}");
+                    } else {
+                        bot.ArchiLogger.LogGenericInfo($"ID: {games[0]} | Status: Error | Queue: {count} | Next run: {DateTime.Now.AddMinutes(1):T}");
+
+                        RecommendationsTimers[bot.BotName].Change(TimeSpan.FromMinutes(1), TimeSpan.FromMilliseconds(-1));
+
+                        return;
                     }
-                ).ConfigureAwait(false);
-
-                count -= 1;
-
-                if (response) {
-                    bot.ArchiLogger.LogGenericInfo($"ID: {games[0]} | Status: OK | Queue: {count}");
-                } else {
-                    bot.ArchiLogger.LogGenericInfo($"ID: {games[0]} | Status: Error | Queue: {count} | Next run: {DateTime.Now.AddMinutes(1):T}");
-
-                    RecommendationsTimers[bot.BotName].Change(TimeSpan.FromMinutes(1), TimeSpan.FromMilliseconds(-1));
-
-                    return;
                 }
 
                 bot.ArchiLogger.LogGenericInfo($"Status: QueueIsEmpty | Next run: {DateTime.Now.AddHours(FreeItemsTimeout[bot.BotName]):T}");
@@ -215,5 +242,39 @@ internal sealed class FreeItems : IGitHubPluginUpdates, IBotModules {
         }
 
         RecommendationsTimers[bot.BotName].Change(TimeSpan.FromMinutes(1), TimeSpan.FromMilliseconds(-1));
+    }
+
+    public async Task ClaimDailyStickers(Bot bot) {
+        int timeout = 1;
+
+        if (bot.IsConnectedAndLoggedOn) {
+            ObjectResponse<ClaimItemResponse>? rawResponse = await bot.ArchiWebHandler.UrlPostToJsonObjectWithSession<ClaimItemResponse>(
+                new Uri("https://api.steampowered.com/ISaleItemRewardsService/ClaimItem/v1/"), data: new Dictionary<string, string>(1) {
+                    { "access_token", bot.AccessToken ?? string.Empty }
+                }, session: ArchiWebHandler.ESession.None
+            ).ConfigureAwait(false);
+
+            ClaimItemResponse? response = rawResponse?.Content;
+
+            if (response != null) {
+                if (response.RewardItem != null) {
+                    string name = response.RewardItem.CommunityItem?.ItemName ?? response.RewardItem.CommunityItem?.ItemTitle ?? "UNKNOWN";
+
+                    timeout = (DateTimeOffset.FromUnixTimeSeconds(response.NextClaimTime).LocalDateTime - DateTime.Now).Minutes;
+
+                    bot.ArchiLogger.LogGenericInfo($"ID: {response.RewardItem.DefId} {name} | Status: OK | Next run: {DateTime.Now.AddMinutes(timeout):T}");
+                } else {
+                    timeout = 60;
+
+                    bot.ArchiLogger.LogGenericInfo($"Status: NoItemToClaim | Next run: {DateTime.Now.AddMinutes(timeout):T}");
+                }
+            } else {
+                bot.ArchiLogger.LogGenericInfo($"Status: Error | Next run: {DateTime.Now.AddMinutes(timeout):T}");
+            }
+        } else {
+            bot.ArchiLogger.LogGenericInfo($"Status: BotNotConnected | Next run: {DateTime.Now.AddMinutes(timeout):T}");
+        }
+
+        DailyStickersTimers[bot.BotName].Change(TimeSpan.FromMinutes(timeout), TimeSpan.FromMilliseconds(-1));
     }
 }

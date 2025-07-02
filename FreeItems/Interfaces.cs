@@ -36,3 +36,27 @@ internal sealed record GetDiscoveryQueueResponse {
         public List<int>? AppIds { get; set; }
     }
 }
+
+internal sealed record ClaimItemResponse {
+    [JsonPropertyName("next_claim_time")]
+    public long NextClaimTime { get; set; }
+
+    [JsonPropertyName("reward_item")]
+    public RewardItemData? RewardItem { get; set; }
+
+    internal sealed record RewardItemData {
+        [JsonPropertyName("defid")]
+        public uint DefId { get; set; }
+
+        [JsonPropertyName("community_item_data")]
+        public CommunityItemData? CommunityItem { get; set; }
+
+        public sealed record CommunityItemData {
+            [JsonPropertyName("item_name")]
+            public string? ItemName { get; set; }
+
+            [JsonPropertyName("item_title")]
+            public string? ItemTitle { get; set; }
+        }
+    }
+}
