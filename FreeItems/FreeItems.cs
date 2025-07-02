@@ -177,10 +177,10 @@ internal sealed class FreeItems : IGitHubPluginUpdates, IBotModules {
             if (freePoints.Count > 0) {
                 foreach (uint pointId in freePoints) {
                     ObjectResponse<JsonElement>? rawResponse = await bot.ArchiWebHandler.UrlPostToJsonObjectWithSession<JsonElement>(
-                        new Uri("https://api.steampowered.com/ILoyaltyRewardsService/RedeemPoints/v1/"), data: new Dictionary<string, string>(3) {
+                        new Uri("https://api.steampowered.com/ILoyaltyRewardsService/RedeemPoints/v1/"), data: new Dictionary<string, string>(2) {
                             { "access_token", bot.AccessToken ?? string.Empty },
                             { "defid", $"{pointId}" }
-                        }
+                        }, session: ArchiWebHandler.ESession.None
                     ).ConfigureAwait(false);
 
                     JsonElement? response = rawResponse?.Content;
