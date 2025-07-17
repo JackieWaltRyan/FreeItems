@@ -3,6 +3,23 @@ using System.Text.Json.Serialization;
 
 namespace FreeItems;
 
+internal sealed record FreeItemsConfig {
+    [JsonInclude]
+    public bool PointStoreItems { get; set; }
+
+    [JsonInclude]
+    public bool RecommendationsItems { get; set; }
+
+    [JsonInclude]
+    public bool DailyStickers { get; set; }
+
+    [JsonInclude]
+    public uint Timeout { get; set; } = 6;
+
+    [JsonConstructor]
+    public FreeItemsConfig() { }
+}
+
 internal sealed record QueryRewardItemsResponse {
     [JsonPropertyName("response")]
     public ResponseData? Response { get; set; }
@@ -12,7 +29,7 @@ internal sealed record QueryRewardItemsResponse {
         public List<RewardItemData>? Definitions { get; set; }
 
         [JsonPropertyName("total_count")]
-        public int? TotalCount { get; set; }
+        public uint? TotalCount { get; set; }
 
         [JsonPropertyName("next_cursor")]
         public string? Cursor { get; set; }
@@ -27,13 +44,35 @@ internal sealed record QueryRewardItemsResponse {
     }
 }
 
+internal sealed record RedeemPointsResponse {
+    [JsonPropertyName("response")]
+    public ResponseData? Response { get; set; }
+
+    internal sealed record ResponseData {
+        [JsonPropertyName("communityitemid")]
+        public long CommunityItemId { get; set; }
+    }
+}
+
+internal sealed record SeasonalSalesDateResponse {
+    public required List<Item> Items { get; set; }
+
+    internal sealed record Item {
+        [JsonPropertyName("start")]
+        public required string Start { get; set; }
+
+        [JsonPropertyName("end")]
+        public required string End { get; set; }
+    }
+}
+
 internal sealed record GetDiscoveryQueueResponse {
     [JsonPropertyName("response")]
     public ResponseData? Response { get; set; }
 
     internal sealed record ResponseData {
         [JsonPropertyName("appids")]
-        public List<int>? AppIds { get; set; }
+        public List<uint>? AppIds { get; set; }
     }
 }
 
