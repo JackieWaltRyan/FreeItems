@@ -189,12 +189,12 @@ internal sealed class FreeItems : IGitHubPluginUpdates, IBotModules {
 
     public async Task ClaimRecommendationsItems(Bot bot) {
         if (bot.IsConnectedAndLoggedOn) {
-            ObjectResponse<SeasonalSalesDateResponse>? seasonalSalesDateResponse = await bot.ArchiWebHandler.UrlGetToJsonObjectWithSession<SeasonalSalesDateResponse>(new Uri("https://raw.githubusercontent.com/JackieWaltRyan/FreeItems/refs/heads/main/SeasonalSalesDate.json")).ConfigureAwait(false);
+            ObjectResponse<List<SeasonalSalesDateResponse>>? seasonalSalesDateResponse = await bot.ArchiWebHandler.UrlGetToJsonObjectWithSession<List<SeasonalSalesDateResponse>>(new Uri("https://raw.githubusercontent.com/JackieWaltRyan/FreeItems/refs/heads/main/SeasonalSalesDate.json")).ConfigureAwait(false);
 
-            List<SeasonalSalesDateResponse.Item>? dates = seasonalSalesDateResponse?.Content?.Items;
+            List<SeasonalSalesDateResponse>? dates = seasonalSalesDateResponse?.Content;
 
             if (dates != null) {
-                foreach (SeasonalSalesDateResponse.Item date in dates) {
+                foreach (SeasonalSalesDateResponse date in dates) {
                     DateTime dateStart = DateTime.Parse(date.Start, CultureInfo.CreateSpecificCulture("ru-RU"));
                     DateTime dateEnd = DateTime.Parse(date.End, CultureInfo.CreateSpecificCulture("ru-RU"));
 

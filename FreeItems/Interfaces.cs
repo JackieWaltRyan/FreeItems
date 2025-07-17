@@ -55,15 +55,11 @@ internal sealed record RedeemPointsResponse {
 }
 
 internal sealed record SeasonalSalesDateResponse {
-    public required List<Item> Items { get; set; }
+    [JsonPropertyName("start")]
+    public required string Start { get; set; }
 
-    internal sealed record Item {
-        [JsonPropertyName("start")]
-        public required string Start { get; set; }
-
-        [JsonPropertyName("end")]
-        public required string End { get; set; }
-    }
+    [JsonPropertyName("end")]
+    public required string End { get; set; }
 }
 
 internal sealed record GetDiscoveryQueueResponse {
