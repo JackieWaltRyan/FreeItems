@@ -107,6 +107,8 @@ internal sealed class FreeItems : IGitHubPluginUpdates, IBotModules {
             string url = $"https://api.steampowered.com/ILoyaltyRewardsService/QueryRewardItems/v1/?access_token={bot.AccessToken}&count=1000";
 
             if (cursor != null) {
+                bot.ArchiLogger.LogGenericInfo($"cursor: {cursor}");
+
                 url += $"&cursor={cursor}";
             }
 
@@ -134,11 +136,15 @@ internal sealed class FreeItems : IGitHubPluginUpdates, IBotModules {
 
                     pointList.AddRange(newPointList);
                 } else {
+                    bot.ArchiLogger.LogGenericInfo("Definitions null.");
+
                     await Task.Delay(3000).ConfigureAwait(false);
 
                     await LoadPointStoreItems(bot, count, cursor).ConfigureAwait(false);
                 }
             } else {
+                bot.ArchiLogger.LogGenericInfo("response null.");
+
                 await Task.Delay(3000).ConfigureAwait(false);
 
                 await LoadPointStoreItems(bot, count, cursor).ConfigureAwait(false);
@@ -146,6 +152,8 @@ internal sealed class FreeItems : IGitHubPluginUpdates, IBotModules {
 
             return pointList;
         } catch {
+            bot.ArchiLogger.LogGenericInfo("catch");
+
             await Task.Delay(3000).ConfigureAwait(false);
 
             return await LoadPointStoreItems(bot, count, cursor).ConfigureAwait(false);
