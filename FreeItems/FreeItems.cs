@@ -121,7 +121,7 @@ internal sealed class FreeItems : IGitHubPluginUpdates, IBotModules {
                     bot.ArchiLogger.LogGenericInfo($"Load all points: {count}/{response.TotalCount}");
 
                     foreach (QueryRewardItemsResponse.ResponseData.RewardItemData item in response.Definitions) {
-                        if (item.PointCost == 0) {
+                        if (item.PointCost == "0") {
                             pointList.Add(item.DefId);
                         }
                     }
@@ -189,7 +189,7 @@ internal sealed class FreeItems : IGitHubPluginUpdates, IBotModules {
 
     public async Task ClaimRecommendationsItems(Bot bot) {
         if (bot.IsConnectedAndLoggedOn) {
-            ObjectResponse<List<SeasonalSalesDateResponse>>? seasonalSalesDateResponse = await bot.ArchiWebHandler.UrlGetToJsonObjectWithSession<List<SeasonalSalesDateResponse>>(new Uri("https://raw.githubusercontent.com/JackieWaltRyan/FreeItems/refs/heads/main/SeasonalSalesDate.json")).ConfigureAwait(false);
+            ObjectResponse<List<SeasonalSalesDateResponse>>? seasonalSalesDateResponse = await bot.ArchiWebHandler.WebBrowser.UrlGetToJsonObject<List<SeasonalSalesDateResponse>>(new Uri("https://raw.githubusercontent.com/JackieWaltRyan/FreeItems/refs/heads/main/SeasonalSalesDate.json")).ConfigureAwait(false);
 
             List<SeasonalSalesDateResponse>? dates = seasonalSalesDateResponse?.Content;
 
