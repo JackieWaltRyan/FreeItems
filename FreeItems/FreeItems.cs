@@ -109,8 +109,10 @@ internal sealed class FreeItems : IGitHubPluginUpdates, IBotModules {
             if (cursor != null) {
                 bot.ArchiLogger.LogGenericInfo($"cursor: {cursor}");
 
-                url += $"&cursor={cursor}";
+                url += $"&cursor={Uri.EscapeDataString(cursor)}";
             }
+
+            bot.ArchiLogger.LogGenericInfo($"url: {url}");
 
             ObjectResponse<QueryRewardItemsResponse>? rawResponse = await bot.ArchiWebHandler.UrlGetToJsonObjectWithSession<QueryRewardItemsResponse>(new Uri(url)).ConfigureAwait(false);
 
