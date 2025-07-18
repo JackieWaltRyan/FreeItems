@@ -104,7 +104,7 @@ internal sealed class FreeItems : IGitHubPluginUpdates, IBotModules {
                 return pointList;
             }
 
-            string url = $"https://api.steampowered.com/ILoyaltyRewardsService/QueryRewardItems/v1/?access_token={bot.AccessToken}&count=1000";
+            string url = $"https://api.steampowered.com/ILoyaltyRewardsService/QueryRewardItems/v1/?access_token={bot.AccessToken}&count=1000&include_direct_purchase_disabled=true";
 
             if (cursor != null) {
                 url += $"&cursor={Uri.EscapeDataString(cursor)}";
