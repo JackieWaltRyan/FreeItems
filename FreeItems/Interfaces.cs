@@ -29,7 +29,7 @@ internal sealed record QueryRewardItemsResponse {
         public List<RewardItemData>? Definitions { get; set; }
 
         [JsonPropertyName("total_count")]
-        public uint? TotalCount { get; set; }
+        public uint TotalCount { get; set; }
 
         [JsonPropertyName("next_cursor")]
         public string? Cursor { get; set; }

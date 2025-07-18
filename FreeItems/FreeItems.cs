@@ -96,7 +96,7 @@ internal sealed class FreeItems : IGitHubPluginUpdates, IBotModules {
         }
     }
 
-    public async Task<List<uint>> LoadPointStoreItems(Bot bot, int count = 0, string? cursor = null) {
+    public async Task<List<uint>> LoadPointStoreItems(Bot bot, uint count = 0, string? cursor = null) {
         try {
             List<uint> pointList = [];
 
@@ -116,7 +116,11 @@ internal sealed class FreeItems : IGitHubPluginUpdates, IBotModules {
 
             if (response != null) {
                 if (response.Definitions != null) {
-                    count += response.Definitions.Count;
+                    if (response.TotalCount - count >= 1000) {
+                        count += 1000;
+                    } else {
+                        count += response.TotalCount - count;
+                    }
 
                     bot.ArchiLogger.LogGenericInfo($"Load all points: {count}/{response.TotalCount}");
 
@@ -129,8 +133,6 @@ internal sealed class FreeItems : IGitHubPluginUpdates, IBotModules {
                     if (count >= response.TotalCount) {
                         return pointList;
                     }
-
-                    await Task.Delay(1000).ConfigureAwait(false);
 
                     List<uint> newPointList = await LoadPointStoreItems(bot, count, response.Cursor).ConfigureAwait(false);
 
