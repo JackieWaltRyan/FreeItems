@@ -130,7 +130,7 @@ internal sealed class FreeItems : IGitHubPluginUpdates, IBotModules {
                         return pointList;
                     }
 
-                    await Task.Delay(500).ConfigureAwait(false);
+                    await Task.Delay(1000).ConfigureAwait(false);
 
                     List<uint> newPointList = await LoadPointStoreItems(bot, count, response.Cursor).ConfigureAwait(false);
 
