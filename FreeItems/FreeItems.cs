@@ -122,7 +122,7 @@ internal sealed class FreeItems : IGitHubPluginUpdates, IBotModules {
                         count += response.TotalCount - count;
                     }
 
-                    bot.ArchiLogger.LogGenericInfo($"Load all points: {count}/{response.TotalCount}");
+                    bot.ArchiLogger.LogGenericInfo($"Load all items: {count}/{response.TotalCount}");
 
                     foreach (QueryRewardItemsResponse.ResponseData.RewardItemData item in response.Definitions) {
                         if (item.PointCost == "0") {
@@ -133,6 +133,8 @@ internal sealed class FreeItems : IGitHubPluginUpdates, IBotModules {
                     if (count >= response.TotalCount) {
                         return pointList;
                     }
+
+                    await Task.Delay(1000).ConfigureAwait(false);
 
                     List<uint> newPointList = await LoadPointStoreItems(bot, count, response.Cursor).ConfigureAwait(false);
 
@@ -160,7 +162,7 @@ internal sealed class FreeItems : IGitHubPluginUpdates, IBotModules {
         if (bot.IsConnectedAndLoggedOn) {
             List<uint> freePoints = await LoadPointStoreItems(bot).ConfigureAwait(false);
 
-            bot.ArchiLogger.LogGenericInfo($"Free points found: {freePoints.Count}");
+            bot.ArchiLogger.LogGenericInfo($"Free items found: {freePoints.Count}");
 
             if (freePoints.Count > 0) {
                 int queue = freePoints.Count;
@@ -173,7 +175,7 @@ internal sealed class FreeItems : IGitHubPluginUpdates, IBotModules {
                         }, session: ArchiWebHandler.ESession.None
                     ).ConfigureAwait(false);
 
-                    long? response = rawResponse?.Content?.Response?.CommunityItemId;
+                    string? response = rawResponse?.Content?.Response?.CommunityItemId;
 
                     queue -= 1;
 

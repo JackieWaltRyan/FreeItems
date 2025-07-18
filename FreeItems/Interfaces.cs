@@ -50,7 +50,7 @@ internal sealed record RedeemPointsResponse {
 
     internal sealed record ResponseData {
         [JsonPropertyName("communityitemid")]
-        public long CommunityItemId { get; set; }
+        public string? CommunityItemId { get; set; }
     }
 }
 
