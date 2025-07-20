@@ -96,7 +96,7 @@ internal sealed class FreeItems : IGitHubPluginUpdates, IBotModules {
         }
     }
 
-    public static async Task<List<uint>> LoadPointStoreItems(Bot bot, uint? count = 0, string? cursor = null, bool? app = true) {
+    public static async Task<List<uint>> LoadPointStoreItems(Bot bot, uint? count = 0, string? cursor = null) {
         try {
             List<uint> pointList = [];
 
@@ -105,10 +105,6 @@ internal sealed class FreeItems : IGitHubPluginUpdates, IBotModules {
             }
 
             string url = $"https://api.steampowered.com/ILoyaltyRewardsService/QueryRewardItems/v1/?access_token={bot.AccessToken}&count=1000&include_direct_purchase_disabled=true";
-
-            if (app == true) {
-                url += "&appids%5B0%5D=2598440";
-            }
 
             if (cursor != null) {
                 url += $"&cursor={Uri.EscapeDataString(cursor)}";
@@ -134,16 +130,11 @@ internal sealed class FreeItems : IGitHubPluginUpdates, IBotModules {
                         }
                     }
 
-                    if (app == true) {
-                        app = false;
-                        count = 0;
-                    } else {
-                        if (count >= response.TotalCount) {
-                            return pointList;
-                        }
-
-                        cursor = response.Cursor;
+                    if (count >= response.TotalCount) {
+                        return pointList;
                     }
+
+                    cursor = response.Cursor;
 
                     await Task.Delay(1000).ConfigureAwait(false);
                 } else {
@@ -153,13 +144,13 @@ internal sealed class FreeItems : IGitHubPluginUpdates, IBotModules {
                 await Task.Delay(3000).ConfigureAwait(false);
             }
 
-            pointList.AddRange(await LoadPointStoreItems(bot, count, cursor, app).ConfigureAwait(false));
+            pointList.AddRange(await LoadPointStoreItems(bot, count, cursor).ConfigureAwait(false));
 
             return pointList;
         } catch {
             await Task.Delay(3000).ConfigureAwait(false);
 
-            return await LoadPointStoreItems(bot, count, cursor, app).ConfigureAwait(false);
+            return await LoadPointStoreItems(bot, count, cursor).ConfigureAwait(false);
         }
     }
 

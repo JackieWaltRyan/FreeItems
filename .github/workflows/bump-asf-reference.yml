@@ -1,0 +1,57 @@
+name: Plugin-bump-asf-reference
+
+on:
+  schedule:
+    - cron: "17 1 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  main:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4.2.2
+        with:
+          show-progress: false
+
+      - name: Fetch latest ArchiSteamFarm release
+        id: asf-release
+        uses: rez0n/actions-github-release@v2.0
+        with:
+          repository: JustArchiNET/ArchiSteamFarm
+          type: stable
+
+      - name: Update ASF reference if needed
+        env:
+          LATEST_ASF_RELEASE: ${{ steps.asf-release.outputs.release }}
+        shell: sh
+        run: |
+          set -eu
+
+          current_version="$(git config -f .gitmodules submodule.ArchiSteamFarm.branch)"
+
+          if dpkg --compare-versions "$current_version" "ge" "$LATEST_ASF_RELEASE"; then
+              exit
+          fi
+
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+          git config -f .gitmodules submodule.ArchiSteamFarm.branch "$LATEST_ASF_RELEASE"
+
+          git add -A ".gitmodules"
+
+          if ! git config --get user.email > /dev/null; then
+              git config --local user.email "action@github.com"
+          fi
+
+          if ! git config --get user.name > /dev/null; then
+              git config --local user.name "GitHub Action"
+          fi
+
+          git commit -m "Automatic ArchiSteamFarm reference update to ${LATEST_ASF_RELEASE}"
+
+          git push

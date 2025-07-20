@@ -3,7 +3,7 @@
 
     <PropertyGroup>
         <PluginName>FreeItems</PluginName>
-        <Version>1.0.0.5</Version>
+        <Version>1.0.1.0</Version>
         <ApplicationIcon />
         <Authors>JackieWaltRyan</Authors>
         <Company>$(Authors)</Company>
