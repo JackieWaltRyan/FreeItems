@@ -38,6 +38,9 @@ internal sealed record QueryRewardItemsResponse {
             [JsonPropertyName("defid")]
             public uint DefId { get; set; }
 
+            [JsonPropertyName("type")]
+            public uint Type { get; set; }
+
             [JsonPropertyName("point_cost")]
             public string? PointCost { get; set; }
         }
