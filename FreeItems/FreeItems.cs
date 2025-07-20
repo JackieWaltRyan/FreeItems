@@ -125,7 +125,7 @@ internal sealed class FreeItems : IGitHubPluginUpdates, IBotModules {
                     bot.ArchiLogger.LogGenericInfo($"Load all items: {count}/{response.TotalCount}");
 
                     foreach (QueryRewardItemsResponse.ResponseData.RewardItemData item in response.Definitions) {
-                        if ((item.Type != 6) && (item.PointCost == "0")) {
+                        if ((item.BundleDefIds == null) && (item.PointCost == "0")) {
                             pointList.Add(item.DefId);
                         }
                     }

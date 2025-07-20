@@ -38,11 +38,11 @@ internal sealed record QueryRewardItemsResponse {
             [JsonPropertyName("defid")]
             public uint DefId { get; set; }
 
-            [JsonPropertyName("type")]
-            public uint Type { get; set; }
-
             [JsonPropertyName("point_cost")]
             public string? PointCost { get; set; }
+
+            [JsonPropertyName("bundle_defids")]
+            public List<uint>? BundleDefIds { get; set; }
         }
     }
 }
