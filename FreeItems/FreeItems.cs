@@ -26,31 +26,9 @@ internal sealed class FreeItems : IGitHubPluginUpdates, IBotModules {
         if (additionalConfigProperties != null) {
             if (FreeItemsTimers.TryGetValue(bot.BotName, out Dictionary<string, Timer>? dict)) {
                 foreach (KeyValuePair<string, Timer> timers in dict) {
-                    switch (timers.Key) {
-                        case "ClaimPointStoreItems": {
-                            await timers.Value.DisposeAsync().ConfigureAwait(false);
+                    await timers.Value.DisposeAsync().ConfigureAwait(false);
 
-                            bot.ArchiLogger.LogGenericInfo("ClaimPointStoreItems Dispose.");
-
-                            break;
-                        }
-
-                        case "ClaimRecommendationsItems": {
-                            await timers.Value.DisposeAsync().ConfigureAwait(false);
-
-                            bot.ArchiLogger.LogGenericInfo("ClaimRecommendationsItems Dispose.");
-
-                            break;
-                        }
-
-                        case "ClaimDailyStickers": {
-                            await timers.Value.DisposeAsync().ConfigureAwait(false);
-
-                            bot.ArchiLogger.LogGenericInfo("ClaimDailyStickers Dispose.");
-
-                            break;
-                        }
-                    }
+                    bot.ArchiLogger.LogGenericInfo($"{timers.Key} Dispose.");
                 }
             }
 
