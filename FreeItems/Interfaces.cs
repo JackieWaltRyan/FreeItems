@@ -14,6 +14,9 @@ internal sealed record FreeItemsConfig {
     public bool DailyStickers { get; set; }
 
     [JsonInclude]
+    public List<uint> BlackList { get; set; } = [];
+
+    [JsonInclude]
     public uint Timeout { get; set; } = 6;
 
     [JsonConstructor]
@@ -35,6 +38,9 @@ internal sealed record QueryRewardItemsResponse {
         public string? Cursor { get; set; }
 
         internal sealed record RewardItemData {
+            [JsonPropertyName("appid")]
+            public uint AppId { get; set; }
+
             [JsonPropertyName("defid")]
             public uint DefId { get; set; }
 

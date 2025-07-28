@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -74,12 +75,12 @@ internal sealed class FreeItems : IGitHubPluginUpdates, IBotModules {
         }
     }
 
-    public static async Task<List<uint>> LoadPointStoreItems(Bot bot, uint? count = 0, string? cursor = null) {
+    public async Task<Dictionary<uint, uint>> LoadPointStoreItems(Bot bot, uint? count = 0, string? cursor = null) {
         try {
-            List<uint> pointList = [];
+            Dictionary<uint, uint> pointDict = new();
 
             if (!bot.IsConnectedAndLoggedOn) {
-                return pointList;
+                return pointDict;
             }
 
             string url = $"https://api.steampowered.com/ILoyaltyRewardsService/QueryRewardItems/v1/?access_token={bot.AccessToken}&count=1000&include_direct_purchase_disabled=true";
@@ -103,13 +104,13 @@ internal sealed class FreeItems : IGitHubPluginUpdates, IBotModules {
                     bot.ArchiLogger.LogGenericInfo($"Load all items: {count}/{response.TotalCount}");
 
                     foreach (QueryRewardItemsResponse.ResponseData.RewardItemData item in response.Definitions) {
-                        if ((item.BundleDefIds == null) && (item.PointCost == "0")) {
-                            pointList.Add(item.DefId);
+                        if ((item.BundleDefIds == null) && (item.PointCost == "0") && !FreeItemsConfig[bot.BotName].BlackList.Contains(item.DefId)) {
+                            pointDict[item.AppId] = item.DefId;
                         }
                     }
 
                     if (count >= response.TotalCount) {
-                        return pointList;
+                        return pointDict;
                     }
 
                     cursor = response.Cursor;
@@ -122,9 +123,9 @@ internal sealed class FreeItems : IGitHubPluginUpdates, IBotModules {
                 await Task.Delay(3000).ConfigureAwait(false);
             }
 
-            pointList.AddRange(await LoadPointStoreItems(bot, count, cursor).ConfigureAwait(false));
+            pointDict = pointDict.Concat(await LoadPointStoreItems(bot, count, cursor).ConfigureAwait(false)).ToDictionary(static x => x.Key, static x => x.Value);
 
-            return pointList;
+            return pointDict;
         } catch {
             await Task.Delay(3000).ConfigureAwait(false);
 
@@ -134,18 +135,22 @@ internal sealed class FreeItems : IGitHubPluginUpdates, IBotModules {
 
     public async Task ClaimPointStoreItems(Bot bot) {
         if (bot.IsConnectedAndLoggedOn) {
-            List<uint> freePoints = await LoadPointStoreItems(bot).ConfigureAwait(false);
+            if (FreeItemsConfig[bot.BotName].BlackList.Count > 0) {
+                bot.ArchiLogger.LogGenericInfo($"BlackList: {FreeItemsConfig[bot.BotName].BlackList.ToJsonText()}");
+            }
+
+            Dictionary<uint, uint> freePoints = await LoadPointStoreItems(bot).ConfigureAwait(false);
 
             bot.ArchiLogger.LogGenericInfo($"Free items found: {freePoints.Count}");
 
             if (freePoints.Count > 0) {
                 int queue = freePoints.Count;
 
-                foreach (uint pointId in freePoints) {
+                foreach (KeyValuePair<uint, uint> point in freePoints) {
                     ObjectResponse<RedeemPointsResponse>? rawResponse = await bot.ArchiWebHandler.UrlPostToJsonObjectWithSession<RedeemPointsResponse>(
                         new Uri("https://api.steampowered.com/ILoyaltyRewardsService/RedeemPoints/v1/"), data: new Dictionary<string, string>(2) {
                             { "access_token", bot.AccessToken ?? string.Empty },
-                            { "defid", $"{pointId}" }
+                            { "defid", $"{point.Value}" }
                         }, session: ArchiWebHandler.ESession.None
                     ).ConfigureAwait(false);
 
@@ -153,7 +158,7 @@ internal sealed class FreeItems : IGitHubPluginUpdates, IBotModules {
 
                     queue -= 1;
 
-                    bot.ArchiLogger.LogGenericInfo(response != null ? $"ID: {pointId} | Status: OK | Queue: {queue}" : $"ID: {pointId} | Status: Error | Queue: {queue}");
+                    bot.ArchiLogger.LogGenericInfo(response != null ? $"ID: {point.Key}/{point.Value} | Status: OK | Queue: {queue}" : $"ID: {point.Key}/{point.Value} | Status: Error | Queue: {queue}");
                 }
             }
 

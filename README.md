@@ -23,6 +23,7 @@ Default configuration. To change this feature, add the following parameter to yo
   "FreeItemsConfig": {
     "PointStoreItems": false,
     "RecommendationsItems": false,
+	"BlackList": [],
     "Timeout": 6
   }
 }
@@ -32,6 +33,11 @@ Default configuration. To change this feature, add the following parameter to yo
   Points Shop (animated avatars, frames, stickers, backgrounds, etc.).<br><br>
 - `RecommendationsItems` - `bool` type with default value of `false`. If `true`, automatically browse the list of
   recommendations during seasonal sales (spring, summer, autumn, winter) to get 9 free stickers.<br><br>
+- `BlackList` - `List<uint>` type with default value of being empty. List of `itemID` items that should never be 
+  collected, even if possible. The main reason is that there are some items on Steam that are always free. Since 
+  there is no way to check whether the bot already has such an item in its inventory or not, the plugin will always 
+  try to get such items again. To prevent the plugin from sending extra requests to the server every time and wasting 
+  time, you can disable such items in this list.<br><br>
 - `Timeout` - `uint` type with default value of `6`. This is the number of hours to wait between rechecks for all free
   items. By default, this value is 6 hours. Since checking can create a large number of requests to the Steam servers,
   it is strongly recommended not to set this value too low!
