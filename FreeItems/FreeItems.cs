@@ -105,7 +105,7 @@ internal sealed class FreeItems : IGitHubPluginUpdates, IBotModules {
 
                     foreach (QueryRewardItemsResponse.ResponseData.RewardItemData item in response.Definitions) {
                         if ((item.BundleDefIds == null) && (item.PointCost == "0") && !FreeItemsConfig[bot.BotName].BlackList.Contains(item.DefId)) {
-                            pointDict[item.AppId] = item.DefId;
+                            pointDict[item.DefId] = item.AppId;
                         }
                     }
 
@@ -150,7 +150,7 @@ internal sealed class FreeItems : IGitHubPluginUpdates, IBotModules {
                     ObjectResponse<RedeemPointsResponse>? rawResponse = await bot.ArchiWebHandler.UrlPostToJsonObjectWithSession<RedeemPointsResponse>(
                         new Uri("https://api.steampowered.com/ILoyaltyRewardsService/RedeemPoints/v1/"), data: new Dictionary<string, string>(2) {
                             { "access_token", bot.AccessToken ?? string.Empty },
-                            { "defid", $"{point.Value}" }
+                            { "defid", $"{point.Key}" }
                         }, session: ArchiWebHandler.ESession.None
                     ).ConfigureAwait(false);
 
@@ -158,7 +158,7 @@ internal sealed class FreeItems : IGitHubPluginUpdates, IBotModules {
 
                     queue -= 1;
 
-                    bot.ArchiLogger.LogGenericInfo(response != null ? $"ID: {point.Key}/{point.Value} | Status: OK | Queue: {queue}" : $"ID: {point.Key}/{point.Value} | Status: Error | Queue: {queue}");
+                    bot.ArchiLogger.LogGenericInfo(response != null ? $"App: {point.Value} / ID: {point.Key} | Status: OK | Queue: {queue}" : $"App: {point.Value} / ID: {point.Key} | Status: Error | Queue: {queue}");
                 }
             }
 
