@@ -117,17 +117,17 @@ internal sealed class FreeItems : IGitHubPluginUpdates, IBotModules {
 
                     await Task.Delay(1000).ConfigureAwait(false);
                 } else {
-                    await Task.Delay(3000).ConfigureAwait(false);
+                    await Task.Delay(5000).ConfigureAwait(false);
                 }
             } else {
-                await Task.Delay(3000).ConfigureAwait(false);
+                await Task.Delay(5000).ConfigureAwait(false);
             }
 
             pointDict = pointDict.Concat(await LoadPointStoreItems(bot, count, cursor).ConfigureAwait(false)).ToDictionary(static x => x.Key, static x => x.Value);
 
             return pointDict;
         } catch {
-            await Task.Delay(3000).ConfigureAwait(false);
+            await Task.Delay(5000).ConfigureAwait(false);
 
             return await LoadPointStoreItems(bot, count, cursor).ConfigureAwait(false);
         }
@@ -159,6 +159,12 @@ internal sealed class FreeItems : IGitHubPluginUpdates, IBotModules {
                     queue -= 1;
 
                     bot.ArchiLogger.LogGenericInfo(response != null ? $"App: {point.Value} / ID: {point.Key} | Status: OK | Queue: {queue}" : $"App: {point.Value} / ID: {point.Key} | Status: Error | Queue: {queue}");
+
+                    if (response != null) {
+                        await Task.Delay(1000).ConfigureAwait(false);
+                    } else {
+                        await Task.Delay(5000).ConfigureAwait(false);
+                    }
                 }
             }
 
@@ -214,6 +220,8 @@ internal sealed class FreeItems : IGitHubPluginUpdates, IBotModules {
 
                                 if (response) {
                                     bot.ArchiLogger.LogGenericInfo($"ID: {gameId} | Status: OK | Queue: {queue}");
+
+                                    await Task.Delay(1000).ConfigureAwait(false);
                                 } else {
                                     bot.ArchiLogger.LogGenericInfo($"ID: {gameId} | Status: Error | Queue: {queue} | Next run: {DateTime.Now.AddMinutes(1):T}");
 
