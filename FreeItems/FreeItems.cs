@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
@@ -18,8 +19,8 @@ internal sealed class FreeItems : IGitHubPluginUpdates, IBotModules {
     public string RepositoryName => "JackieWaltRyan/FreeItems";
     public Version Version => typeof(FreeItems).Assembly.GetName().Version ?? throw new InvalidOperationException(nameof(Version));
 
-    public Dictionary<string, FreeItemsConfig> FreeItemsConfig = new();
-    public Dictionary<string, Dictionary<string, Timer>> FreeItemsTimers = new();
+    public ConcurrentDictionary<string, FreeItemsConfig> FreeItemsConfig = new();
+    public ConcurrentDictionary<string, Dictionary<string, Timer>> FreeItemsTimers = new();
 
     public Task OnLoaded() => Task.CompletedTask;
 
@@ -279,7 +280,7 @@ internal sealed class FreeItems : IGitHubPluginUpdates, IBotModules {
                 if (response.RewardItem != null) {
                     string name = response.RewardItem.CommunityItem?.ItemName ?? response.RewardItem.CommunityItem?.ItemTitle ?? "UNKNOWN";
 
-                    int timeout = (DateTimeOffset.FromUnixTimeSeconds(response.NextClaimTime).LocalDateTime - DateTime.Now).Minutes;
+                    int timeout = Math.Max(1, (int) Math.Ceiling((DateTimeOffset.FromUnixTimeSeconds(response.NextClaimTime).LocalDateTime - DateTime.Now).TotalMinutes));
 
                     bot.ArchiLogger.LogGenericInfo($"ID: {response.RewardItem.DefId} {name} | Status: OK | Next run: {DateTime.Now.AddMinutes(timeout):T}");
 
