@@ -167,6 +167,7 @@ internal sealed class FreeItems : IGitHubPluginUpdates, IBotModules, IBotConnect
                     }
 
                     cursor = response.Cursor;
+                    retryCount = 0;
 
                     await Task.Delay(1000).ConfigureAwait(false);
                 } else {
@@ -186,7 +187,10 @@ internal sealed class FreeItems : IGitHubPluginUpdates, IBotModules, IBotConnect
                 retryCount++;
             }
 
-            pointDict = pointDict.Concat(await LoadPointStoreItems(bot, count, cursor, retryCount).ConfigureAwait(false)).ToDictionary(static x => x.Key, static x => x.Value);
+            Dictionary<uint, uint> nextItems = await LoadPointStoreItems(bot, count, cursor, retryCount).ConfigureAwait(false);
+            foreach (KeyValuePair<uint, uint> kv in nextItems) {
+                pointDict[kv.Key] = kv.Value;
+            }
 
             return pointDict;
         } catch {
@@ -348,7 +352,7 @@ internal sealed class FreeItems : IGitHubPluginUpdates, IBotModules, IBotConnect
                 if (response.RewardItem != null) {
                     string name = response.RewardItem.CommunityItem?.ItemName ?? response.RewardItem.CommunityItem?.ItemTitle ?? "UNKNOWN";
 
-                    int timeout = Math.Max(1, (int) Math.Ceiling((DateTimeOffset.FromUnixTimeSeconds(response.NextClaimTime).LocalDateTime - DateTime.Now).TotalMinutes));
+                    int timeout = Math.Max(1, (int) Math.Ceiling((DateTimeOffset.FromUnixTimeSeconds(response.NextClaimTime) - DateTimeOffset.UtcNow).TotalMinutes));
 
                     bot.ArchiLogger.LogGenericInfo($"ID: {response.RewardItem.DefId} {name} | Status: OK | Next run: {DateTime.Now.AddMinutes(timeout):T}");
 
