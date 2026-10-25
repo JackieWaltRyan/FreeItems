@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
@@ -20,8 +21,8 @@ internal sealed class FreeItems : IGitHubPluginUpdates, IBotModules, IBotConnect
     public string RepositoryName => "JackieWaltRyan/FreeItems";
     public Version Version => typeof(FreeItems).Assembly.GetName().Version ?? throw new InvalidOperationException(nameof(Version));
 
-    public Dictionary<string, FreeItemsConfig> FreeItemsConfig = new(StringComparer.OrdinalIgnoreCase);
-    public Dictionary<string, Dictionary<string, Timer>> FreeItemsTimers = new(StringComparer.OrdinalIgnoreCase);
+    public ConcurrentDictionary<string, FreeItemsConfig> FreeItemsConfig = new(StringComparer.OrdinalIgnoreCase);
+    public ConcurrentDictionary<string, Dictionary<string, Timer>> FreeItemsTimers = new(StringComparer.OrdinalIgnoreCase);
 
     public Task OnLoaded() {
         ASF.ArchiLogger.LogGenericInfo($"{Name} V{Version} loaded.");
@@ -36,11 +37,7 @@ internal sealed class FreeItems : IGitHubPluginUpdates, IBotModules, IBotConnect
             }
         }
 
-        FreeItemsTimers[bot.BotName] = new Dictionary<string, Timer> {
-            { "ClaimPointStoreItems", new Timer(async _ => await ClaimPointStoreItems(bot).ConfigureAwait(false), null, Timeout.Infinite, Timeout.Infinite) },
-            { "ClaimRecommendationsItems", new Timer(async _ => await ClaimRecommendationsItems(bot).ConfigureAwait(false), null, Timeout.Infinite, Timeout.Infinite) },
-            { "ClaimDailyStickers", new Timer(async _ => await ClaimDailyStickers(bot).ConfigureAwait(false), null, Timeout.Infinite, Timeout.Infinite) }
-        };
+        FreeItemsTimers[bot.BotName] = CreateBotTimers(bot);
 
         FreeItemsConfig[bot.BotName] = new FreeItemsConfig {
             PointStoreItems = true,
@@ -87,11 +84,7 @@ internal sealed class FreeItems : IGitHubPluginUpdates, IBotModules, IBotConnect
         }
 
         if (!FreeItemsTimers.ContainsKey(bot.BotName)) {
-            FreeItemsTimers[bot.BotName] = new Dictionary<string, Timer> {
-                { "ClaimPointStoreItems", new Timer(async _ => await ClaimPointStoreItems(bot).ConfigureAwait(false), null, Timeout.Infinite, Timeout.Infinite) },
-                { "ClaimRecommendationsItems", new Timer(async _ => await ClaimRecommendationsItems(bot).ConfigureAwait(false), null, Timeout.Infinite, Timeout.Infinite) },
-                { "ClaimDailyStickers", new Timer(async _ => await ClaimDailyStickers(bot).ConfigureAwait(false), null, Timeout.Infinite, Timeout.Infinite) }
-            };
+            FreeItemsTimers[bot.BotName] = CreateBotTimers(bot);
         }
 
         ScheduleBotTimers(bot, TimeSpan.FromMinutes(1));
@@ -106,6 +99,27 @@ internal sealed class FreeItems : IGitHubPluginUpdates, IBotModules, IBotConnect
         }
 
         return Task.CompletedTask;
+    }
+
+    private Dictionary<string, Timer> CreateBotTimers(Bot bot) => new() {
+        { "ClaimPointStoreItems", new Timer(async _ => await SafeRunTimerCallback(bot, "ClaimPointStoreItems", () => ClaimPointStoreItems(bot)).ConfigureAwait(false), null, Timeout.Infinite, Timeout.Infinite) },
+        { "ClaimRecommendationsItems", new Timer(async _ => await SafeRunTimerCallback(bot, "ClaimRecommendationsItems", () => ClaimRecommendationsItems(bot)).ConfigureAwait(false), null, Timeout.Infinite, Timeout.Infinite) },
+        { "ClaimDailyStickers", new Timer(async _ => await SafeRunTimerCallback(bot, "ClaimDailyStickers", () => ClaimDailyStickers(bot)).ConfigureAwait(false), null, Timeout.Infinite, Timeout.Infinite) }
+    };
+
+    private async Task SafeRunTimerCallback(Bot bot, string timerName, Func<Task> callback) {
+        try {
+            await callback().ConfigureAwait(false);
+        } catch (Exception e) {
+            bot.ArchiLogger.LogGenericWarningException(e);
+            if (FreeItemsTimers.TryGetValue(bot.BotName, out Dictionary<string, Timer>? timers) &&
+                timers.TryGetValue(timerName, out Timer? timer)) {
+                try {
+                    timer.Change(TimeSpan.FromMinutes(5), Timeout.InfiniteTimeSpan);
+                } catch (ObjectDisposedException) {
+                }
+            }
+        }
     }
 
     private void ScheduleBotTimers(Bot bot, TimeSpan initialDelay) {
@@ -148,10 +162,12 @@ internal sealed class FreeItems : IGitHubPluginUpdates, IBotModules, IBotConnect
 
             if (response != null) {
                 if (response.Definitions != null) {
-                    if (response.TotalCount - count >= 1000) {
-                        count += 1000;
-                    } else {
-                        count += response.TotalCount - count;
+                    if (response.TotalCount > count) {
+                        if (response.TotalCount - count >= 1000) {
+                            count += 1000;
+                        } else {
+                            count += response.TotalCount - count;
+                        }
                     }
 
                     bot.ArchiLogger.LogGenericInfo($"Load all items: {count}/{response.TotalCount}");
