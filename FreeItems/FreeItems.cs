@@ -1,46 +1,52 @@
-﻿using System;
+using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using ArchiSteamFarm.Core;
 using ArchiSteamFarm.Helpers.Json;
 using ArchiSteamFarm.Plugins.Interfaces;
 using ArchiSteamFarm.Steam;
 using ArchiSteamFarm.Steam.Integration;
 using ArchiSteamFarm.Web.Responses;
+using SteamKit2;
 
 namespace FreeItems;
 
-internal sealed class FreeItems : IGitHubPluginUpdates, IBotModules {
+internal sealed class FreeItems : IGitHubPluginUpdates, IBotModules, IBotConnection, IDisposable {
     public string Name => nameof(FreeItems);
     public string RepositoryName => "JackieWaltRyan/FreeItems";
     public Version Version => typeof(FreeItems).Assembly.GetName().Version ?? throw new InvalidOperationException(nameof(Version));
 
-    public Dictionary<string, FreeItemsConfig> FreeItemsConfig = new();
-    public Dictionary<string, Dictionary<string, Timer>> FreeItemsTimers = new();
+    public ConcurrentDictionary<string, FreeItemsConfig> FreeItemsConfig = new(StringComparer.OrdinalIgnoreCase);
+    public ConcurrentDictionary<string, Dictionary<string, Timer>> FreeItemsTimers = new(StringComparer.OrdinalIgnoreCase);
 
-    public Task OnLoaded() => Task.CompletedTask;
+    public Task OnLoaded() {
+        ASF.ArchiLogger.LogGenericInfo($"{Name} V{Version} loaded.");
+        return Task.CompletedTask;
+    }
 
     public async Task OnBotInitModules(Bot bot, IReadOnlyDictionary<string, JsonElement>? additionalConfigProperties = null) {
-        if (additionalConfigProperties != null) {
-            if (FreeItemsTimers.TryGetValue(bot.BotName, out Dictionary<string, Timer>? dict)) {
-                foreach (KeyValuePair<string, Timer> timers in dict) {
-                    await timers.Value.DisposeAsync().ConfigureAwait(false);
-
-                    bot.ArchiLogger.LogGenericInfo($"{timers.Key} Dispose.");
-                }
+        if (FreeItemsTimers.TryGetValue(bot.BotName, out Dictionary<string, Timer>? dict)) {
+            foreach (KeyValuePair<string, Timer> timers in dict) {
+                await timers.Value.DisposeAsync().ConfigureAwait(false);
+                bot.ArchiLogger.LogGenericInfo($"{timers.Key} Dispose.");
             }
+        }
 
-            FreeItemsTimers[bot.BotName] = new Dictionary<string, Timer> {
-                { "ClaimPointStoreItems", new Timer(async e => await ClaimPointStoreItems(bot).ConfigureAwait(false), null, Timeout.Infinite, Timeout.Infinite) },
-                { "ClaimRecommendationsItems", new Timer(async e => await ClaimRecommendationsItems(bot).ConfigureAwait(false), null, Timeout.Infinite, Timeout.Infinite) },
-                { "ClaimDailyStickers", new Timer(async e => await ClaimDailyStickers(bot).ConfigureAwait(false), null, Timeout.Infinite, Timeout.Infinite) }
-            };
+        FreeItemsTimers[bot.BotName] = CreateBotTimers(bot);
 
-            FreeItemsConfig[bot.BotName] = new FreeItemsConfig();
+        FreeItemsConfig[bot.BotName] = new FreeItemsConfig {
+            PointStoreItems = true,
+            RecommendationsItems = true,
+            DailyStickers = true,
+            Timeout = 6
+        };
 
+        if (additionalConfigProperties != null) {
             foreach (KeyValuePair<string, JsonElement> configProperty in additionalConfigProperties) {
                 switch (configProperty.Key) {
                     case "FreeItemsConfig": {
@@ -54,28 +60,89 @@ internal sealed class FreeItems : IGitHubPluginUpdates, IBotModules {
                     }
                 }
             }
+        }
 
-            FreeItemsConfig psc = FreeItemsConfig[bot.BotName];
+        FreeItemsConfig psc = FreeItemsConfig[bot.BotName];
 
-            if (psc.PointStoreItems || psc.RecommendationsItems || psc.DailyStickers) {
-                bot.ArchiLogger.LogGenericInfo($"FreeItemsConfig: {psc.ToJsonText()}");
+        if (psc.PointStoreItems || psc.RecommendationsItems || psc.DailyStickers) {
+            bot.ArchiLogger.LogGenericInfo($"FreeItemsConfig: {psc.ToJsonText()}");
 
-                if (psc.PointStoreItems) {
-                    FreeItemsTimers[bot.BotName]["ClaimPointStoreItems"].Change(1, -1);
-                }
+            if (bot.IsConnectedAndLoggedOn) {
+                ScheduleBotTimers(bot, TimeSpan.FromSeconds(5));
+            }
+        }
+    }
 
-                if (psc.RecommendationsItems) {
-                    FreeItemsTimers[bot.BotName]["ClaimRecommendationsItems"].Change(1, -1);
-                }
+    public Task OnBotLoggedOn(Bot bot) {
+        if (!FreeItemsConfig.ContainsKey(bot.BotName)) {
+            FreeItemsConfig[bot.BotName] = new FreeItemsConfig {
+                PointStoreItems = true,
+                RecommendationsItems = true,
+                DailyStickers = true,
+                Timeout = 6
+            };
+        }
 
-                if (psc.DailyStickers) {
-                    FreeItemsTimers[bot.BotName]["ClaimDailyStickers"].Change(1, -1);
+        if (!FreeItemsTimers.ContainsKey(bot.BotName)) {
+            FreeItemsTimers[bot.BotName] = CreateBotTimers(bot);
+        }
+
+        ScheduleBotTimers(bot, TimeSpan.FromMinutes(1));
+        return Task.CompletedTask;
+    }
+
+    public Task OnBotDisconnected(Bot bot, EResult reason) {
+        if (FreeItemsTimers.TryGetValue(bot.BotName, out Dictionary<string, Timer>? dict)) {
+            foreach (Timer timer in dict.Values) {
+                timer.Change(Timeout.Infinite, Timeout.Infinite);
+            }
+        }
+
+        return Task.CompletedTask;
+    }
+
+    private Dictionary<string, Timer> CreateBotTimers(Bot bot) => new() {
+        { "ClaimPointStoreItems", new Timer(async _ => await SafeRunTimerCallback(bot, "ClaimPointStoreItems", () => ClaimPointStoreItems(bot)).ConfigureAwait(false), null, Timeout.Infinite, Timeout.Infinite) },
+        { "ClaimRecommendationsItems", new Timer(async _ => await SafeRunTimerCallback(bot, "ClaimRecommendationsItems", () => ClaimRecommendationsItems(bot)).ConfigureAwait(false), null, Timeout.Infinite, Timeout.Infinite) },
+        { "ClaimDailyStickers", new Timer(async _ => await SafeRunTimerCallback(bot, "ClaimDailyStickers", () => ClaimDailyStickers(bot)).ConfigureAwait(false), null, Timeout.Infinite, Timeout.Infinite) }
+    };
+
+    private async Task SafeRunTimerCallback(Bot bot, string timerName, Func<Task> callback) {
+        try {
+            await callback().ConfigureAwait(false);
+        } catch (Exception e) {
+            bot.ArchiLogger.LogGenericWarningException(e);
+            if (FreeItemsTimers.TryGetValue(bot.BotName, out Dictionary<string, Timer>? timers) &&
+                timers.TryGetValue(timerName, out Timer? timer)) {
+                try {
+                    timer.Change(TimeSpan.FromMinutes(5), Timeout.InfiniteTimeSpan);
+                } catch (ObjectDisposedException) {
                 }
             }
         }
     }
 
-    public async Task<Dictionary<uint, uint>> LoadPointStoreItems(Bot bot, uint? count = 0, string? cursor = null) {
+    private void ScheduleBotTimers(Bot bot, TimeSpan initialDelay) {
+        if (!FreeItemsConfig.TryGetValue(bot.BotName, out FreeItemsConfig? psc) ||
+            !FreeItemsTimers.TryGetValue(bot.BotName, out Dictionary<string, Timer>? timers)) {
+            return;
+        }
+
+        if (psc.PointStoreItems && timers.TryGetValue("ClaimPointStoreItems", out Timer? pointTimer)) {
+            pointTimer.Change(initialDelay, Timeout.InfiniteTimeSpan);
+        }
+
+        if (psc.RecommendationsItems && timers.TryGetValue("ClaimRecommendationsItems", out Timer? recTimer)) {
+            recTimer.Change(initialDelay + TimeSpan.FromSeconds(15), Timeout.InfiniteTimeSpan);
+        }
+
+        if (psc.DailyStickers && timers.TryGetValue("ClaimDailyStickers", out Timer? stickerTimer)) {
+            stickerTimer.Change(initialDelay + TimeSpan.FromSeconds(30), Timeout.InfiniteTimeSpan);
+        }
+    }
+
+    public async Task<Dictionary<uint, uint>> LoadPointStoreItems(Bot bot, uint? count = 0, string? cursor = null, int retryCount = 0) {
+        const int maxRetries = 3;
         try {
             Dictionary<uint, uint> pointDict = new();
 
@@ -95,10 +162,12 @@ internal sealed class FreeItems : IGitHubPluginUpdates, IBotModules {
 
             if (response != null) {
                 if (response.Definitions != null) {
-                    if (response.TotalCount - count >= 1000) {
-                        count += 1000;
-                    } else {
-                        count += response.TotalCount - count;
+                    if (response.TotalCount > count) {
+                        if (response.TotalCount - count >= 1000) {
+                            count += 1000;
+                        } else {
+                            count += response.TotalCount - count;
+                        }
                     }
 
                     bot.ArchiLogger.LogGenericInfo($"Load all items: {count}/{response.TotalCount}");
@@ -109,27 +178,45 @@ internal sealed class FreeItems : IGitHubPluginUpdates, IBotModules {
                         }
                     }
 
-                    if (count >= response.TotalCount) {
+                    if (count >= response.TotalCount || string.IsNullOrEmpty(response.Cursor)) {
                         return pointDict;
                     }
 
                     cursor = response.Cursor;
+                    retryCount = 0;
 
                     await Task.Delay(1000).ConfigureAwait(false);
                 } else {
+                    if (retryCount >= maxRetries) {
+                        return pointDict;
+                    }
+
                     await Task.Delay(5000).ConfigureAwait(false);
+                    retryCount++;
                 }
             } else {
+                if (retryCount >= maxRetries) {
+                    return pointDict;
+                }
+
                 await Task.Delay(5000).ConfigureAwait(false);
+                retryCount++;
             }
 
-            pointDict = pointDict.Concat(await LoadPointStoreItems(bot, count, cursor).ConfigureAwait(false)).ToDictionary(static x => x.Key, static x => x.Value);
+            Dictionary<uint, uint> nextItems = await LoadPointStoreItems(bot, count, cursor, retryCount).ConfigureAwait(false);
+            foreach (KeyValuePair<uint, uint> kv in nextItems) {
+                pointDict[kv.Key] = kv.Value;
+            }
 
             return pointDict;
         } catch {
+            if (retryCount >= maxRetries) {
+                return new Dictionary<uint, uint>();
+            }
+
             await Task.Delay(5000).ConfigureAwait(false);
 
-            return await LoadPointStoreItems(bot, count, cursor).ConfigureAwait(false);
+            return await LoadPointStoreItems(bot, count, cursor, retryCount + 1).ConfigureAwait(false);
         }
     }
 
@@ -168,13 +255,14 @@ internal sealed class FreeItems : IGitHubPluginUpdates, IBotModules {
                 }
             }
 
-            bot.ArchiLogger.LogGenericInfo($"Status: QueueIsEmpty | Next run: {DateTime.Now.AddHours(FreeItemsConfig[bot.BotName].Timeout):T}");
+            uint timeoutHours = Math.Max(1u, FreeItemsConfig[bot.BotName].Timeout);
+            bot.ArchiLogger.LogGenericInfo($"Status: QueueIsEmpty | Next run: {DateTime.Now.AddHours(timeoutHours):T}");
 
-            FreeItemsTimers[bot.BotName]["ClaimPointStoreItems"].Change(TimeSpan.FromHours(FreeItemsConfig[bot.BotName].Timeout), TimeSpan.FromMilliseconds(-1));
+            FreeItemsTimers[bot.BotName]["ClaimPointStoreItems"].Change(TimeSpan.FromHours(timeoutHours), Timeout.InfiniteTimeSpan);
         } else {
             bot.ArchiLogger.LogGenericInfo($"Status: BotNotConnected | Next run: {DateTime.Now.AddMinutes(1):T}");
 
-            FreeItemsTimers[bot.BotName]["ClaimPointStoreItems"].Change(TimeSpan.FromMinutes(1), TimeSpan.FromMilliseconds(-1));
+            FreeItemsTimers[bot.BotName]["ClaimPointStoreItems"].Change(TimeSpan.FromMinutes(1), Timeout.InfiniteTimeSpan);
         }
     }
 
@@ -225,7 +313,7 @@ internal sealed class FreeItems : IGitHubPluginUpdates, IBotModules {
                                 } else {
                                     bot.ArchiLogger.LogGenericInfo($"ID: {gameId} | Status: Error | Queue: {queue} | Next run: {DateTime.Now.AddMinutes(1):T}");
 
-                                    FreeItemsTimers[bot.BotName]["ClaimRecommendationsItems"].Change(TimeSpan.FromMinutes(1), TimeSpan.FromMilliseconds(-1));
+                                    FreeItemsTimers[bot.BotName]["ClaimRecommendationsItems"].Change(TimeSpan.FromMinutes(1), Timeout.InfiniteTimeSpan);
 
                                     return;
                                 }
@@ -233,7 +321,7 @@ internal sealed class FreeItems : IGitHubPluginUpdates, IBotModules {
                         } else {
                             bot.ArchiLogger.LogGenericInfo($"Status: Error | Next run: {DateTime.Now.AddMinutes(1):T}");
 
-                            FreeItemsTimers[bot.BotName]["ClaimRecommendationsItems"].Change(TimeSpan.FromMinutes(1), TimeSpan.FromMilliseconds(-1));
+                            FreeItemsTimers[bot.BotName]["ClaimRecommendationsItems"].Change(TimeSpan.FromMinutes(1), Timeout.InfiniteTimeSpan);
 
                             return;
                         }
@@ -245,14 +333,15 @@ internal sealed class FreeItems : IGitHubPluginUpdates, IBotModules {
 
                     bot.ArchiLogger.LogGenericInfo($"Status: QueueIsEmpty | Next run: {DateTime.Now.AddHours(24):T}");
 
-                    FreeItemsTimers[bot.BotName]["ClaimRecommendationsItems"].Change(TimeSpan.FromHours(24), TimeSpan.FromMilliseconds(-1));
+                    FreeItemsTimers[bot.BotName]["ClaimRecommendationsItems"].Change(TimeSpan.FromHours(24), Timeout.InfiniteTimeSpan);
 
                     return;
                 }
 
-                bot.ArchiLogger.LogGenericInfo($"Status: NoItemToClaim | Next run: {DateTime.Now.AddHours(FreeItemsConfig[bot.BotName].Timeout):T}");
+                uint timeoutHours = Math.Max(1u, FreeItemsConfig[bot.BotName].Timeout);
+                bot.ArchiLogger.LogGenericInfo($"Status: NoItemToClaim | Next run: {DateTime.Now.AddHours(timeoutHours):T}");
 
-                FreeItemsTimers[bot.BotName]["ClaimRecommendationsItems"].Change(TimeSpan.FromHours(FreeItemsConfig[bot.BotName].Timeout), TimeSpan.FromMilliseconds(-1));
+                FreeItemsTimers[bot.BotName]["ClaimRecommendationsItems"].Change(TimeSpan.FromHours(timeoutHours), Timeout.InfiniteTimeSpan);
 
                 return;
             }
@@ -262,7 +351,7 @@ internal sealed class FreeItems : IGitHubPluginUpdates, IBotModules {
             bot.ArchiLogger.LogGenericInfo($"Status: BotNotConnected | Next run: {DateTime.Now.AddMinutes(1):T}");
         }
 
-        FreeItemsTimers[bot.BotName]["ClaimRecommendationsItems"].Change(TimeSpan.FromMinutes(1), TimeSpan.FromMilliseconds(-1));
+        FreeItemsTimers[bot.BotName]["ClaimRecommendationsItems"].Change(TimeSpan.FromMinutes(1), Timeout.InfiniteTimeSpan);
     }
 
     public async Task ClaimDailyStickers(Bot bot) {
@@ -279,15 +368,16 @@ internal sealed class FreeItems : IGitHubPluginUpdates, IBotModules {
                 if (response.RewardItem != null) {
                     string name = response.RewardItem.CommunityItem?.ItemName ?? response.RewardItem.CommunityItem?.ItemTitle ?? "UNKNOWN";
 
-                    int timeout = (DateTimeOffset.FromUnixTimeSeconds(response.NextClaimTime).LocalDateTime - DateTime.Now).Minutes;
+                    int timeout = Math.Max(1, (int) Math.Ceiling((DateTimeOffset.FromUnixTimeSeconds(response.NextClaimTime) - DateTimeOffset.UtcNow).TotalMinutes));
 
                     bot.ArchiLogger.LogGenericInfo($"ID: {response.RewardItem.DefId} {name} | Status: OK | Next run: {DateTime.Now.AddMinutes(timeout):T}");
 
-                    FreeItemsTimers[bot.BotName]["ClaimDailyStickers"].Change(TimeSpan.FromMinutes(timeout), TimeSpan.FromMilliseconds(-1));
+                    FreeItemsTimers[bot.BotName]["ClaimDailyStickers"].Change(TimeSpan.FromMinutes(timeout), Timeout.InfiniteTimeSpan);
                 } else {
-                    bot.ArchiLogger.LogGenericInfo($"Status: NoItemToClaim | Next run: {DateTime.Now.AddHours(FreeItemsConfig[bot.BotName].Timeout):T}");
+                    uint timeoutHours = Math.Max(1u, FreeItemsConfig[bot.BotName].Timeout);
+                    bot.ArchiLogger.LogGenericInfo($"Status: NoItemToClaim | Next run: {DateTime.Now.AddHours(timeoutHours):T}");
 
-                    FreeItemsTimers[bot.BotName]["ClaimDailyStickers"].Change(TimeSpan.FromHours(FreeItemsConfig[bot.BotName].Timeout), TimeSpan.FromMilliseconds(-1));
+                    FreeItemsTimers[bot.BotName]["ClaimDailyStickers"].Change(TimeSpan.FromHours(timeoutHours), Timeout.InfiniteTimeSpan);
                 }
 
                 return;
@@ -298,6 +388,16 @@ internal sealed class FreeItems : IGitHubPluginUpdates, IBotModules {
             bot.ArchiLogger.LogGenericInfo($"Status: BotNotConnected | Next run: {DateTime.Now.AddMinutes(1):T}");
         }
 
-        FreeItemsTimers[bot.BotName]["ClaimDailyStickers"].Change(TimeSpan.FromMinutes(1), TimeSpan.FromMilliseconds(-1));
+        FreeItemsTimers[bot.BotName]["ClaimDailyStickers"].Change(TimeSpan.FromMinutes(1), Timeout.InfiniteTimeSpan);
+    }
+
+    public void Dispose() {
+        foreach (Dictionary<string, Timer> dict in FreeItemsTimers.Values) {
+            foreach (Timer timer in dict.Values) {
+                timer.Dispose();
+            }
+        }
+
+        FreeItemsTimers.Clear();
     }
 }
